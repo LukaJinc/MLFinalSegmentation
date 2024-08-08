@@ -26,10 +26,14 @@ class MultiClassClusterDescriptions:
             trees[n_clusters] = clf
         return trees
 
-    def describe_clusters(self):
+    def describe_clusters(self, f1_type):
+        if f1_type not in ['binary', 'weighted']:
+            raise ValueError("f1_type must be either 'binary' or 'weighted'")
+
         for n_clusters in self.k_range:
             descriptions_n = {}
-            total_f1_score = 0
+            cluster_f1_scores = []
+            cluster_instances = []
 
             tree = self.decision_trees[n_clusters]
             y_true = self.final_cluster_assignments[f'cluster_{n_clusters}']
@@ -37,17 +41,94 @@ class MultiClassClusterDescriptions:
 
             for cluster in range(n_clusters):
                 query = self.get_cluster_query(tree, cluster)
+                cluster_instances.append(np.sum(y_true == cluster))
                 cluster_f1 = f1_score(y_true == cluster, y_pred == cluster, average='binary')
+                cluster_f1_scores.append(cluster_f1)
 
                 descriptions_n[cluster] = {
                     'query': query,
                     'f1_score': cluster_f1
                 }
-                total_f1_score += cluster_f1
 
             self.descriptions[n_clusters] = descriptions_n
-            avg_f1_score = total_f1_score / n_clusters
-            print(f'<-- Descriptions generated for {n_clusters} clusters. Average F1-score: {avg_f1_score:.4f} -->')
+
+            if f1_type == 'binary':
+                f1_score_n = np.average(cluster_f1_scores)
+            else:
+                f1_score_n = f1_score(y_true, y_pred, average='weighted')
+
+            # print(f'<-- Descriptions generated for {n_clusters} clusters -->')
+            print(f'<-- Weighted F1-score for {n_clusters} clusters: {f1_score_n:.4f} -->')
+
+            # for cluster in range(n_clusters):
+            #     print(
+            #         f'Cluster {cluster}: F1-score = {cluster_f1_scores[cluster]:.4f}, Instances = {cluster_instances[cluster]}')
+
+    # def get_max_described_leaf(self, tree, cluster):
+    #     n_nodes = tree.tree_.node_count
+    #     children_left = tree.tree_.children_left
+    #     children_right = tree.tree_.children_right
+    #     weighted_n_node_samples = tree.tree_.weighted_n_node_samples
+    #     value = tree.tree_.value
+    #
+    #     is_leaves = (children_left == children_right)
+    #     classes = np.zeros(n_nodes)
+    #     for i in range(n_nodes):
+    #         if is_leaves[i] != 0:
+    #             classes[i] = np.argmax(value[i][0])
+    #
+    #     found_points = {}
+    #     for i in range(n_nodes):
+    #         if classes[i] == cluster:
+    #             found_points.update({i: weighted_n_node_samples[i] * value[i][0][cluster]})
+    #
+    #     max_described_num = 0
+    #     max_described_i = -1
+    #     for key in found_points:
+    #         if found_points[key] > max_described_num:
+    #             max_described_num = found_points[key]
+    #             max_described_i = key
+    #
+    #     return max_described_i
+    #
+    # def describe_clusters(self):
+    #     for n_clusters in self.k_range:
+    #         descriptions_n = {}
+    #         cluster_f1_scores = []
+    #         cluster_instances = []
+    #
+    #         tree = self.decision_trees[n_clusters]
+    #         y_true = self.final_cluster_assignments[f'cluster_{n_clusters}']
+    #
+    #         # Use max_described_leaf for predictions
+    #         y_pred = np.zeros_like(y_true)
+    #         for cluster in range(n_clusters):
+    #             max_described_leaf = self.get_max_described_leaf(tree, cluster)
+    #             leaf_id = tree.apply(self.data)
+    #             y_pred[leaf_id == max_described_leaf] = cluster
+    #
+    #         for cluster in range(n_clusters):
+    #             query = self.get_cluster_query(tree, cluster)
+    #             cluster_instances.append(np.sum(y_true == cluster))
+    #             cluster_f1 = f1_score(y_true == cluster, y_pred == cluster, average='binary')
+    #             cluster_f1_scores.append(cluster_f1)
+    #
+    #             descriptions_n[cluster] = {
+    #                 'query': query,
+    #                 'f1_score': cluster_f1
+    #             }
+    #
+    #         self.descriptions[n_clusters] = descriptions_n
+    #
+    #         weighted_f1_score = f1_score(y_true, y_pred, average='weighted')
+    #         # print(f'<-- Descriptions generated for {n_clusters} clusters -->')
+    #         print(f'<-- Weighted F1-score for {n_clusters} clusters: {weighted_f1_score:.4f} -->')
+    #
+    #         # for cluster in range(n_clusters):
+    #         #     print(
+    #         #         f'Cluster {cluster}: F1-score = {cluster_f1_scores[cluster]:.4f}, Instances = {cluster_instances[cluster]}')
+    #         #
+    #         # print()
 
     def get_cluster_query(self, tree, cluster):
         feature = tree.tree_.feature

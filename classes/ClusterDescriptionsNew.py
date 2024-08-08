@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.metrics import f1_score
 import matplotlib.pyplot as plt
@@ -29,7 +30,6 @@ class ClusterDescriptionsNew:
                 #
 
                 if y.mean() < 0.09 and y.sum() > 1000:
-                    print('undersampled')
                     rus = RandomUnderSampler(sampling_strategy=0.1, random_state=RANDOM_STATE)
                     X, y = rus.fit_resample(X, y)
 
@@ -39,28 +39,73 @@ class ClusterDescriptionsNew:
                 trees[n_clusters][cluster] = clf
         return trees
 
-    def describe_clusters(self):
+    def get_max_described_leaf(self, tree):
+        n_nodes = tree.tree_.node_count
+        children_left = tree.tree_.children_left
+        children_right = tree.tree_.children_right
+        weighted_n_node_samples = tree.tree_.weighted_n_node_samples
+        value = tree.tree_.value
+
+        is_leaves = (children_left == children_right)
+        classes = np.zeros(n_nodes)
+        for i in range(n_nodes):
+            if is_leaves[i] != 0:
+                classes[i] = value[i][0][1] > value[i][0][0]
+
+        found_points = {}
+
+        for i in range(n_nodes):
+            if classes[i] == 1:
+                found_points.update({i: weighted_n_node_samples[i] * value[i][0][1]})
+
+        max_described_num = 0
+        max_described_i = -1
+        for key in found_points:
+            if found_points[key] > max_described_num:
+                max_described_num = found_points[key]
+                max_described_i = key
+
+        return max_described_i
+
+    def describe_clusters(self, f1_type='weighted'):
+        if f1_type not in ['binary', 'weighted']:
+            raise ValueError("f1_type must be either 'binary' or 'weighted'")
+
         for n_clusters in self.k_range:
             descriptions_n = {}
-            total_f1_score = 0
+            cluster_f1_scores = []
+            cluster_instances = []
+            y_true = self.final_cluster_assignments[f'cluster_{n_clusters}']
 
             for cluster in range(n_clusters):
                 tree = self.decision_trees[n_clusters][cluster]
-                y_true = (self.final_cluster_assignments[f'cluster_{n_clusters}'] == cluster).astype(int)
-                y_pred = tree.predict(self.data)
+                y_cluster = (y_true == cluster).astype(int)
+                cluster_instances.append(y_cluster.sum())
 
-                query = self.get_cluster_query(tree, cluster)
-                cluster_f1 = f1_score(y_true, y_pred, average='binary')
+                max_described_leaf = self.get_max_described_leaf(tree)
+                leaf_id = tree.apply(self.data)
+                y_pred = (leaf_id == max_described_leaf).astype(int)
+
+                query = self.get_cluster_query(tree, max_described_leaf)
+                cluster_f1 = f1_score(y_cluster, y_pred, average='binary')
+                cluster_f1_scores.append(cluster_f1)
 
                 descriptions_n[cluster] = {
                     'query': query,
                     'f1_score': cluster_f1
                 }
-                total_f1_score += cluster_f1
 
+            if f1_type == 'binary':
+                f1_score_n = np.average(cluster_f1_scores)
+            else:
+                f1_score_n = np.average(cluster_f1_scores, weights=cluster_instances)
             self.descriptions[n_clusters] = descriptions_n
-            avg_f1_score = total_f1_score / n_clusters
-            print(f'<-- F1_Score for {n_clusters} clusters is {avg_f1_score:.4f} -->')
+
+            print(f'<-- Weighted F1_Score for {n_clusters} clusters is {f1_score_n:.4f} -->')
+
+            # for cluster in range(n_clusters):
+            #     print(
+            #         f'Cluster {cluster}: F1-score = {cluster_f1_scores[cluster]:.4f}, Instances = {cluster_instances[cluster]}')
 
     def get_cluster_query(self, tree, cluster):
         feature = tree.tree_.feature

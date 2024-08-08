@@ -121,5 +121,3 @@ def cluster_in_range(df_pca, identifiers, k_range):
     plt.show()
 
     return diff_clusters
-
-

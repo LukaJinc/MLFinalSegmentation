@@ -154,8 +154,6 @@ class ClusterDescriptions:
 
                 f1_score_n = 2 * ((precision * recall) / (precision + recall))
 
-                print('f1_score', f1_score_n)
-
                 f1_score += f1_score_n
 
                 desc['query'] = query
@@ -190,3 +188,8 @@ class ClusterDescriptions:
         for n_clusters in self.k_range:
             for cluster in range(n_clusters):
                 self.plot_decision_tree(n_clusters, cluster)
+
+
+# from classes.ClusterDescriptions import ClusterDescriptions
+# cluster_desc = ClusterDescriptions(data, df_pca, identifiers, range(2, 10))
+# cluster_desc.describe_clusters(data)
