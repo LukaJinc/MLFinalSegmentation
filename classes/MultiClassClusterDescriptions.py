@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier, plot_tree
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, roc_auc_score
 from constants import RANDOM_STATE
-from utils import get_final_assignments, get_segment_distributions
+from utils import get_final_assignments, get_segment_distributions, multiclass_roc_auc_score
 import matplotlib.pyplot as plt
 
 
@@ -38,6 +38,9 @@ class MultiClassClusterDescriptions:
             tree = self.decision_trees[n_clusters]
             y_true = self.final_cluster_assignments[f'cluster_{n_clusters}']
             y_pred = tree.predict(self.data)
+            y_pred_proba = tree.predict_proba(self.data)
+
+            roc_auc_score_n = multiclass_roc_auc_score(y_true, y_pred_proba, average="weighted")
 
             for cluster in range(n_clusters):
                 query = self.get_cluster_query(tree, cluster)
@@ -59,6 +62,9 @@ class MultiClassClusterDescriptions:
 
             # print(f'<-- Descriptions generated for {n_clusters} clusters -->')
             print(f'<-- Weighted F1-score for {n_clusters} clusters: {f1_score_n:.4f} -->')
+            print(f'Weighted ROC AUC score: {roc_auc_score_n:.4f}')
+
+            self.descriptions[n_clusters]['overall_roc_auc'] = roc_auc_score_n
 
             # for cluster in range(n_clusters):
             #     print(
