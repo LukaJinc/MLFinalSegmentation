@@ -36,23 +36,23 @@ def get_segment_distributions(final_cluster_assignments, k_range):
     return distributions
 
 
-def multiclass_roc_auc_score(y_true, y_pred_proba, average="macro"):
-    """
-    Calculate ROC AUC score for multiclass classification.
-
-    :param y_true: True labels
-    :param y_pred_proba: Predicted probabilities for each class
-    :param average: Averaging strategy, can be 'macro' or 'weighted'
-    :return: ROC AUC score
-    """
-    classes = np.unique(y_true)
-    y_true_binarized = label_binarize(y_true, classes=classes)
-
-    if len(classes) == 2:
-        return roc_auc_score(y_true, y_pred_proba[:, 1])
-    else:
-        return roc_auc_score(y_true_binarized, y_pred_proba,
-                             multi_class="ovr", average=average)
+# def multiclass_roc_auc_score(y_true, y_pred_proba, average="macro"):
+#     """
+#     Calculate ROC AUC score for multiclass classification.
+#
+#     :param y_true: True labels
+#     :param y_pred_proba: Predicted probabilities for each class
+#     :param average: Averaging strategy, can be 'macro' or 'weighted'
+#     :return: ROC AUC score
+#     """
+#     classes = np.unique(y_true)
+#     y_true_binarized = label_binarize(y_true, classes=classes)
+#
+#     if len(classes) == 2:
+#         return roc_auc_score(y_true, y_pred_proba[:, 1])
+#     else:
+#         return roc_auc_score(y_true_binarized, y_pred_proba,
+#                              multi_class="ovr", average=average)
 
 
 # interquantile search

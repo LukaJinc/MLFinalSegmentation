@@ -5,7 +5,7 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.metrics import f1_score
 import matplotlib.pyplot as plt
 from constants import RANDOM_STATE
-from utils import get_final_assignments, get_segment_distributions, multiclass_roc_auc_score
+from utils import get_final_assignments, get_segment_distributions
 from imblearn.under_sampling import RandomUnderSampler
 
 
@@ -67,46 +67,6 @@ class ClusterDescriptionsNew:
 
         return max_described_i
 
-    # def describe_clusters(self, f1_type='weighted'):
-    #     if f1_type not in ['binary', 'weighted']:
-    #         raise ValueError("f1_type must be either 'binary' or 'weighted'")
-    #
-    #     for n_clusters in self.k_range:
-    #         descriptions_n = {}
-    #         cluster_f1_scores = []
-    #         cluster_instances = []
-    #         y_true = self.final_cluster_assignments[f'cluster_{n_clusters}']
-    #
-    #         for cluster in range(n_clusters):
-    #             tree = self.decision_trees[n_clusters][cluster]
-    #             y_cluster = (y_true == cluster).astype(int)
-    #             cluster_instances.append(y_cluster.sum())
-    #
-    #             max_described_leaf = self.get_max_described_leaf(tree)
-    #             leaf_id = tree.apply(self.data)
-    #             y_pred = (leaf_id == max_described_leaf).astype(int)
-    #
-    #             query = self.get_cluster_query(tree, max_described_leaf)
-    #             cluster_f1 = f1_score(y_cluster, y_pred, average='binary')
-    #             cluster_f1_scores.append(cluster_f1)
-    #
-    #             descriptions_n[cluster] = {
-    #                 'query': query,
-    #                 'f1_score': cluster_f1
-    #             }
-    #
-    #         if f1_type == 'binary':
-    #             f1_score_n = np.average(cluster_f1_scores)
-    #         else:
-    #             f1_score_n = np.average(cluster_f1_scores, weights=cluster_instances)
-    #         self.descriptions[n_clusters] = descriptions_n
-    #
-    #         print(f'<-- Weighted F1_Score for {n_clusters} clusters is {f1_score_n:.4f} -->')
-    #
-    #         # for cluster in range(n_clusters):
-    #         #     print(
-    #         #         f'Cluster {cluster}: F1-score = {cluster_f1_scores[cluster]:.4f}, Instances = {cluster_instances[cluster]}')
-
     def describe_clusters(self, f1_type='weighted'):
         if f1_type not in ['binary', 'weighted']:
             raise ValueError("f1_type must be either 'binary' or 'weighted'")
@@ -117,24 +77,17 @@ class ClusterDescriptionsNew:
             cluster_instances = []
             y_true = self.final_cluster_assignments[f'cluster_{n_clusters}']
 
-            # Collect all predictions and probabilities
-            all_y_pred = []
-            all_y_pred_proba = []
-
             for cluster in range(n_clusters):
                 tree = self.decision_trees[n_clusters][cluster]
                 y_cluster = (y_true == cluster).astype(int)
                 cluster_instances.append(y_cluster.sum())
 
-                y_pred = tree.predict(self.data)
-                y_pred_proba = tree.predict_proba(self.data)[:, 1]  # Probability of positive class
+                max_described_leaf = self.get_max_described_leaf(tree)
+                leaf_id = tree.apply(self.data)
+                y_pred = (leaf_id == max_described_leaf).astype(int)
 
-                all_y_pred.append(y_pred)
-                all_y_pred_proba.append(y_pred_proba)
-
-                query = self.get_cluster_query(tree, cluster)
+                query = self.get_cluster_query(tree, max_described_leaf)
                 cluster_f1 = f1_score(y_cluster, y_pred, average='binary')
-
                 cluster_f1_scores.append(cluster_f1)
 
                 descriptions_n[cluster] = {
@@ -142,26 +95,17 @@ class ClusterDescriptionsNew:
                     'f1_score': cluster_f1
                 }
 
-            # Convert predictions to multiclass format
-            y_pred_multiclass = np.argmax(np.array(all_y_pred_proba).T, axis=1)
-            y_pred_proba_multiclass = np.array(all_y_pred_proba).T
-
-            # Calculate multiclass ROC AUC
-            roc_auc_score_n = multiclass_roc_auc_score(y_true, y_pred_proba_multiclass, average="weighted")
-
             if f1_type == 'binary':
                 f1_score_n = np.average(cluster_f1_scores)
             else:
                 f1_score_n = np.average(cluster_f1_scores, weights=cluster_instances)
-
             self.descriptions[n_clusters] = descriptions_n
 
-            print(f'<-- Results for {n_clusters} clusters -->')
-            print(f'Weighted F1-Score: {f1_score_n:.4f}')
-            print(f'Weighted ROC AUC Score: {roc_auc_score_n:.4f}')
+            print(f'<-- Weighted F1_Score for {n_clusters} clusters is {f1_score_n:.4f} -->')
 
-            # Add overall ROC AUC to descriptions
-            self.descriptions[n_clusters]['overall_roc_auc'] = roc_auc_score_n
+            # for cluster in range(n_clusters):
+            #     print(
+            #         f'Cluster {cluster}: F1-score = {cluster_f1_scores[cluster]:.4f}, Instances = {cluster_instances[cluster]}')
 
 
     def get_cluster_query(self, tree, cluster):
