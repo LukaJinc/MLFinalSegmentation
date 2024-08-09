@@ -3,9 +3,8 @@ import pandas as pd
 
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler, label_binarize
 from sklearn.metrics import roc_auc_score
-
+from sklearn.preprocessing import StandardScaler, label_binarize
 import matplotlib.pyplot as plt
 
 from constants import RANDOM_STATE
@@ -124,3 +123,25 @@ def cluster_in_range(df_pca, identifiers, k_range):
     plt.show()
 
     return diff_clusters
+
+
+def calculate_roc_auc_scores(y_true, y_pred_proba, n_clusters):
+    y_true_bin = label_binarize(y_true, classes=range(n_clusters))
+
+    if n_clusters == 2:
+        # For binary classification, use the scores for the positive class
+        macro_roc_auc = roc_auc_score(y_true, y_pred_proba[:, 1])
+        weighted_roc_auc = macro_roc_auc  # same for binary classification
+        per_cluster_roc_auc = {
+            0: roc_auc_score(y_true, y_pred_proba[:, 0]),
+            1: roc_auc_score(y_true, y_pred_proba[:, 1])
+        }
+    else:
+        macro_roc_auc = roc_auc_score(y_true_bin, y_pred_proba, average='macro', multi_class='ovr')
+        weighted_roc_auc = roc_auc_score(y_true_bin, y_pred_proba, average='weighted', multi_class='ovr')
+        per_cluster_roc_auc = {
+            i: roc_auc_score(y_true_bin[:, i], y_pred_proba[:, i])
+            for i in range(n_clusters)
+        }
+
+    return macro_roc_auc, weighted_roc_auc, per_cluster_roc_auc

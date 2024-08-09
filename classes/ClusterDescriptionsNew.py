@@ -6,7 +6,7 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from constants import RANDOM_STATE
-from utils import get_final_assignments, get_segment_distributions
+from utils import get_final_assignments, get_segment_distributions, calculate_roc_auc_scores
 from imblearn.under_sampling import RandomUnderSampler
 
 
@@ -40,14 +40,6 @@ def get_max_described_leaf(tree):
 
 
 class ClusterDescriptionsNew:
-    # def __init__(self, data, df_pca, identifiers, k_range):
-    # self.k_range = k_range
-    # self.data = data
-    # self.k_means, self.final_cluster_assignments = get_final_assignments(df_pca, identifiers, k_range)
-    # self.segment_distributions = get_segment_distributions(self.final_cluster_assignments, k_range)
-    # self.decision_trees = self.get_trees()
-    # self.descriptions = {}
-
     def __init__(self, data, df_pca, identifiers, k_range, test_size=0.2):
         self.k_range = k_range
 
@@ -85,9 +77,12 @@ class ClusterDescriptionsNew:
     def describe_clusters(self):
         for n_clusters in self.k_range:
             descriptions_n = {}
-            cluster_f1_scores = []
+            cluster_metrics = []
             cluster_instances = []
             y_true = self.final_cluster_assignments[f'cluster_{n_clusters}']
+
+            y_pred = np.zeros_like(y_true)
+            y_pred_proba = np.zeros((len(y_true), n_clusters))
 
             for cluster in range(n_clusters):
                 tree = self.decision_trees[n_clusters][cluster]
@@ -96,29 +91,45 @@ class ClusterDescriptionsNew:
 
                 max_described_leaf = get_max_described_leaf(tree)
                 leaf_id = tree.apply(self.data_train)
-                y_pred = (leaf_id == max_described_leaf).astype(int)
+                y_pred_cluster = (leaf_id == max_described_leaf).astype(int)
+                y_pred[y_pred_cluster == 1] = cluster
+
+                # Get probabilities for ROC AUC calculation
+                y_pred_proba[:, cluster] = tree.predict_proba(self.data_train)[:, 1]
 
                 query = self.get_cluster_query(tree)
-                cluster_f1 = f1_score(y_cluster, y_pred, average='binary')
-                cluster_f1_scores.append(cluster_f1)
+                cluster_f1 = f1_score(y_cluster, y_pred_cluster, average='binary')
+                cluster_metrics.append({'f1': cluster_f1})
 
                 descriptions_n[cluster] = {
                     'query': query,
-                    'f1_score': cluster_f1
+                    'metrics': {'f1': cluster_f1}
                 }
+
+            # Calculate train ROC AUC scores
+            train_macro_roc_auc, train_weighted_roc_auc, train_per_cluster_roc_auc = calculate_roc_auc_scores(
+                y_true, y_pred_proba, n_clusters
+            )
+
+            # Update cluster metrics and descriptions with ROC AUC scores
+            for cluster in range(n_clusters):
+                cluster_metrics[cluster]['roc_auc'] = train_per_cluster_roc_auc[cluster]
+                descriptions_n[cluster]['metrics']['roc_auc'] = train_per_cluster_roc_auc[cluster]
+
+            train_weighted_f1 = np.average([m['f1'] for m in cluster_metrics], weights=cluster_instances)
+            train_macro_f1 = np.average([m['f1'] for m in cluster_metrics])
+
+            # Evaluate on test set
             test_results = self.evaluate(self.data_test, self.df_pca_test, n_clusters)
-
-            train_weighted_f1 = np.average(cluster_f1_scores, weights=cluster_instances)
-            train_macro_f1 = np.average(cluster_f1_scores)
-
-            test_macro_f1 = test_results['macro_f1']
-            test_weighted_f1 = test_results['weighted_f1']
 
             self.descriptions[n_clusters] = descriptions_n
 
             print(f'<-- Results for {n_clusters} clusters -->')
-            print(f'F1-score: Weighted {train_weighted_f1:.4f}, Macro {train_macro_f1:.4f}')
-            print(f'Test F1-score: Weighted {test_weighted_f1:.4f}, Macro {test_macro_f1:.4f}')
+            print(f'Train F1-score: Weighted {train_weighted_f1:.4f}, Macro {train_macro_f1:.4f}')
+            print(f'Train ROC AUC: Weighted {train_weighted_roc_auc:.4f}, Macro {train_macro_roc_auc:.4f}')
+            print(f'Test F1-score: Weighted {test_results["weighted_f1"]:.4f}, Macro {test_results["macro_f1"]:.4f}')
+            print(
+                f'Test ROC AUC: Weighted {test_results["weighted_roc_auc"]:.4f}, Macro {test_results["macro_roc_auc"]:.4f}')
             print()
 
     def get_cluster_query(self, tree):
@@ -156,6 +167,7 @@ class ClusterDescriptionsNew:
                         if percent > 0:
                             print(f'{percent}% from Previous Segment {index}')
 
+
     def plot_decision_tree(self, n_clusters, cluster):
         if n_clusters not in self.decision_trees or cluster not in self.decision_trees[n_clusters]:
             raise ValueError(f"No decision tree found for {n_clusters} clusters and cluster {cluster}")
@@ -188,15 +200,17 @@ class ClusterDescriptionsNew:
         return self.descriptions[n_clusters]
 
     def evaluate(self, test_data, test_pca, n_clusters):
-        cluster_f1_scores = []
+        cluster_metrics = []
         cluster_instances = []
 
         if n_clusters not in self.decision_trees:
             raise ValueError(f"No decision tree found for {n_clusters} clusters")
 
-        # Generate test labels using the saved KMeans model
         kmeans_model = self.k_means[n_clusters]
         test_labels = kmeans_model.predict(test_pca)
+
+        y_pred = np.zeros_like(test_labels)
+        y_pred_proba = np.zeros((len(test_labels), n_clusters))
 
         for cluster in range(n_clusters):
             tree = self.decision_trees[n_clusters][cluster]
@@ -206,17 +220,34 @@ class ClusterDescriptionsNew:
             max_described_leaf = get_max_described_leaf(tree)
             leaf_id = tree.apply(test_data)
 
-            y_pred = (leaf_id == max_described_leaf).astype(int)
-            cluster_f1 = f1_score(y_cluster, y_pred, average='binary')
-            cluster_f1_scores.append(cluster_f1)
+            y_pred_cluster = (leaf_id == max_described_leaf).astype(int)
+            y_pred[y_pred_cluster == 1] = cluster
 
-        weighted_f1 = np.average(cluster_f1_scores, weights=cluster_instances)
-        macro_f1 = np.average(cluster_f1_scores)
+            # Get probabilities for ROC AUC calculation
+            y_pred_proba[:, cluster] = tree.predict_proba(test_data)[:, 1]
+
+            cluster_f1 = f1_score(y_cluster, y_pred_cluster, average='binary')
+            cluster_metrics.append({'f1': cluster_f1})
+
+        # Calculate ROC AUC scores
+        macro_roc_auc, weighted_roc_auc, per_cluster_roc_auc = calculate_roc_auc_scores(
+            test_labels, y_pred_proba, n_clusters
+        )
+
+        # Update cluster metrics with ROC AUC scores
+        for cluster in range(n_clusters):
+            cluster_metrics[cluster]['roc_auc'] = per_cluster_roc_auc[cluster]
+
+        weighted_f1 = np.average([m['f1'] for m in cluster_metrics], weights=cluster_instances)
+        macro_f1 = np.average([m['f1'] for m in cluster_metrics])
 
         return {
             'macro_f1': macro_f1,
             'weighted_f1': weighted_f1,
-            'per_cluster_f1': cluster_f1_scores,
+            'macro_roc_auc': macro_roc_auc,
+            'weighted_roc_auc': weighted_roc_auc,
+            'per_cluster_metrics': cluster_metrics,
             'test_labels': test_labels
         }
+
 
