@@ -40,3 +40,9 @@ Recall - რამდენად აიხსნება კარგად K-
 დავყოთ პოპულაცია Train/Test ად. K-Means დავატრენინგოთ Train ზე და Decision Tree ებით დავაგენერიროთ აღწერები. მიღებული ცენტროიდებითა, description ებითა და ზემოთ აღწერილი შეფასების მექანიზმით შევაფასოთ test. 
 
 შევხედოთ განსხვავებას train/test შორის. ამ მექანიზმით ჩვენ შევძლებთ overfit ის კონტროლს
+
+# გამოყენებული Dataset - ები:
+[https://www.kaggle.com/datasets/arjunbhasin2013/ccdata]
+[https://www.kaggle.com/datasets/lakshmi25npathi/santander-customer-transaction-prediction-dataset?select=test.csv]
+
+
